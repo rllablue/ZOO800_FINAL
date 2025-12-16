@@ -11,6 +11,7 @@ library(magrittr)
 library(purrr)
 library(stringr)
 library(readxl)
+library(here)
 
 # Diagnostics
 library(nnet)
@@ -45,17 +46,17 @@ spp_name <- "Red-bellied Woodpecker"
 ### --- DATAFRAMES --- ###
 
 # Carry-over DataFrames #
-spp_zf_rll <- read.csv("data/summaries/spp_zf_rll.csv") 
-covars_raw_rll <- read.csv("outputs/data/covars_raw_all.csv")
+spp_zf_rll <- read.csv(here("data", "summaries", "spp_zf_rll.csv"))
+covars_raw_rll <- read.csv(here("outputs", "data", "covars_raw_all.csv"))
 
-wibba_summary_rll <- read.csv("data/summaries/wibba_summary_rll.csv") # df
+wibba_summary_rll <- read.csv(here("data", "summaries", "wibba_summary_rll.csv"))
 blocks_rll <- wibba_summary_rll$atlas_block # vector
 
-blocks_dnr <- read_xlsx("data/summaries/CompBlocks_DNR2023.xlsx") # df
+blocks_dnr <- read_xlsx(here("data", "summaries", "CompBlocks_DNR2023.xlsx"))
 blocks_dnr <- blocks_dnr$atlas_block # vector
 
 
-# SPECIES RICHNESS / EFFORT PROXY (WIP, RE-ORDER)
+# SPECIES RICHNESS / EFFORT PROXY 
 covars_raw_rll <- covars_raw_rll %>%
   mutate(sr_Diff = sr_Atlas2 - sr_Atlas1,
          grass_pasture_crop_base = grassland_base + pasture_crop_base,
@@ -111,16 +112,11 @@ mod_data_rll <- spp_zf_rll %>%
   filter(common_name == spp_name) %>%
   left_join(covars_raw_rll, by = "atlas_block")
 
-write.csv(mod_data_rll, "outputs/data/mod_data_rll.csv", row.names = FALSE)
-
 # DNR modeling df
 mod_data_dnr <- spp_zf_rll %>%
   filter(atlas_block %in% blocks_dnr, 
          common_name == spp_name) %>%  
   left_join(covars_raw_rll, by = "atlas_block")
-
-write.csv(mod_data_dnr, "outputs/data/mod_data_dnr.csv", row.names = FALSE)
-
 
 
 ### -- COVARIATE THINNING --- ###
@@ -135,11 +131,11 @@ write.csv(mod_data_dnr, "outputs/data/mod_data_dnr.csv", row.names = FALSE)
 factor_covars_all
 stable_covars_all
 land_covars_all
-  land_covars_base
-  land_covars_diff
+land_covars_base
+land_covars_diff
 climate_covars_all
-  climate_covars_base
-  climate_covars_diff
+climate_covars_base
+climate_covars_diff
 
 
 # Species-specific Thinned Covariate Sets
@@ -155,8 +151,8 @@ land_covars_reduced <- c("water_open_base", "shrub_scrub_base",
                          "forest_deciduous_base", "forest_evergreen_base", "forest_mixed_base",
                          "wetlands_total_base",
                          
-                          "grass_pasture_crop_diff",
-                          "developed_total_diff", "forest_total_diff", "wetlands_total_diff")
+                         "grass_pasture_crop_diff",
+                         "developed_total_diff", "forest_total_diff", "wetlands_total_diff")
 
 covars_numeric_reduced <- c(stable_covars_all, land_covars_reduced, climate_covars_all)
 
@@ -182,8 +178,8 @@ mod_colabs_rll_z <- mod_data_rll %>%
   )) %>%
   mutate(col_abs = ifelse(transition_state == "Colonization", 1, 0)) %>% # binomial response variable
   dplyr::select(all_of(factor_covars_reduced), # columns to keep
-         ends_with("_z"),
-         col_abs)
+                ends_with("_z"),
+                col_abs)
 
 mod_extper_rll_z <- mod_data_rll %>%
   filter(transition_state %in% c("Extinction", "Persistence")) %>%
@@ -695,7 +691,7 @@ GetTermSupport <- function(df, always_keep = c("pa_percent_z", "sr_Diff_z")) {
 Supported_terms_clean <- lapply(Top_models_list, GetTermSupport)
 lapply(Supported_terms_clean, head, 10)
 
-# Helper: build summary table for best candidate moedl parameters
+# Helper: build summary table for best candidate model parameters
 
 GetBestCandidateTerms <- function(supported_terms_list, keep_terms = c("pa_percent_z", "sr_Diff_z")) {
   
@@ -724,14 +720,15 @@ lapply(BestCandidateTerms, head, 10)
 
 
 
-### --- DIAGNOSTICS --- ###
+### --- MODEL EXAMINATION, DIAGNOSTICS --- ###
 ### Use reference models for each block set, response combo 
 # Can't use ggfortify::autoplot for non-Gaussian; insetad, arm::binnedplot() for residual plots,
 # performance::check_outliers 
 
+# Run, diagnose reference models
 # RLL, ColABs
 rll_colabs_ref <- glm(col_abs ~
-                      pa_percent_z + sr_Diff_z
+                        pa_percent_z + sr_Diff_z
                       + forest_mixed_base_z + forest_total_diff_z + shrub_scrub_base_z 
                       + tmax_38yr_z + tmax_diff_z + wetlands_total_base_z + wetlands_total_diff_z 
                       + forest_total_diff_z:pa_percent_z + pa_percent_z:sr_Diff_z + pa_percent_z:tmax_38yr_z 
@@ -748,9 +745,9 @@ binnedplot(
 check_outliers(rll_colabs_ref)
 
 
-#RLL, ExtPer
+# RLL, ExtPer
 rll_extper_ref <- glm(ext_per ~
-                      pa_percent_z + sr_Diff_z
+                        pa_percent_z + sr_Diff_z
                       + forest_total_diff_z + grass_pasture_crop_base_z + tmax_38yr_z + tmin_diff_z,
                       data = mod_extper_rll_z,
                       family = "binomial"
@@ -764,7 +761,7 @@ binnedplot(
 check_outliers(rll_extper_ref)
 
 
-#DNR, ColAbs
+# DNR, ColAbs
 dnr_colabs_ref <- glm(col_abs ~
                         pa_percent_z + sr_Diff_z
                       + developed_total_base_z + forest_mixed_base_z + forest_total_diff_z 
@@ -784,7 +781,7 @@ check_outliers(dnr_colabs_ref)
 
 # DNR, ExtPer
 dnr_extper_ref <- glm(ext_per ~
-                      pa_percent_z + sr_Diff_z
+                        pa_percent_z + sr_Diff_z
                       + developed_total_base_z + forest_total_diff_z + tmax_38yr_z,
                       data = mod_extper_dnr_z,
                       family = "binomial"                      
@@ -798,17 +795,145 @@ binnedplot(
 check_outliers(dnr_extper_ref)
 
 
-
-mod_ref <- ReferenceModels$RLL_col_abs
-
-
-fit_ref <- glm(
-  formula = mod_ref$formula,
-  data = mod_colabs_rll_z,
-  family = binomial
+# Visualize PA Effects #
+# Consolidate reference models
+ref_models <- list(
+  "RLL Colonization" = rll_colabs_ref,
+  "RLL Extinction"   = rll_extper_ref,
+  "DNR Colonization" = dnr_colabs_ref,
+  "DNR Extinction"   = dnr_extper_ref
 )
 
-autoplot(fit_ref, which = 1:6)
+# Extract PA coefficient value, se
+pa_effects <- lapply(names(ref_models), function(mod_name){
+  tidy_mod <- broom::tidy(ref_models[[mod_name]])
+  
+  # PA main effects only
+  pa_row <- tidy_mod %>% filter(term == "pa_percent_z") %>%
+    mutate(Model = mod_name)
+  
+  return(pa_row)
+}) %>% bind_rows()
+
+
+# Visualize: Coefficient plot (PA main effects)
+ggplot(pa_effects, aes(x = Model, y = estimate, ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+  geom_pointrange(color = "orange", size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  labs(
+    x = "Model",
+    y = "Standardized Effect of Protected Area",
+    caption = "Figure 1. Standardzied main effect of protected area (PA) on apparent colonization and extinction 
+    for the Red-bellied Woodpecker among two survey unit subsets. Points represent effect estimates for each model, 
+    with horizantal lines representing 95% confidence intervals. PA main effects were generally small and often non-significant
+    across models, with the exception of the DNR Colonization model, which had a modest, negative effect (estimate = -0.41, p = 0.013)."
+  ) +
+  theme_minimal(base_size = 13) +
+  coord_flip() + # flip for horizontal readability
+  theme(
+    axis.title.x = element_text(margin = margin(t = 15)),
+    axis.title.y = element_text(margin = margin(r = 15)),
+    plot.caption = element_text(hjust = 0.5, size = 11, margin = margin(t = 15))
+  ) 
 
 
 
+# Assumption Checking #
+# Helper: extract binned residuals for diagnostic plotting
+ComputeBinnedResiduals <- function(model, label, bins = 20) {
+  df <- tibble(
+    fitted = fitted(model),
+    resid  = residuals(model, type = "response")
+  )
+  
+  # create equal-sized bins of fitted probabilities
+  df <- df %>%
+    mutate(bin = cut(fitted,
+                     breaks = quantile(fitted, probs = seq(0, 1, length.out = bins + 1)),
+                     include.lowest = TRUE)) %>%
+    group_by(bin) %>%
+    summarise(
+      fitted_mean = mean(fitted, na.rm = TRUE),
+      resid_mean  = mean(resid, na.rm = TRUE),
+      resid_se    = sd(resid, na.rm = TRUE)/sqrt(n()),
+      .groups = "drop"
+    ) %>%
+    mutate(model = label)
+  
+  return(df)
+}
+
+
+binned_all <- bind_rows(
+  ComputeBinnedResiduals(rll_colabs_ref, "RLL – Colonization–Absence"),
+  ComputeBinnedResiduals(rll_extper_ref, "RLL – Extinction–Persistence"),
+  ComputeBinnedResiduals(dnr_colabs_ref, "DNR – Colonization–Absence"),
+  ComputeBinnedResiduals(dnr_extper_ref, "DNR – Extinction–Persistence")
+)
+
+
+# construct faceted plot
+ggplot(binned_all, aes(x = fitted_mean, y = resid_mean)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_point(size = 2) +
+  geom_errorbar(aes(ymin = resid_mean - resid_se,
+                    ymax = resid_mean + resid_se), width = 0.02) +
+  facet_wrap(~ model, ncol = 2) +
+  labs(
+    x = "Mean fitted probability",
+    y = "Mean binned residual",
+    caption = "Figure S2. Binned residual diagnostic plots for each block set x response logistic model combination.
+    Each point represents the mean residual within a group of fitted probabilities, with vertical error bars representing
+    a +/- 1 standard error of the mean residual. Aggregation of of residuals at low fitted probabilities for the 
+    Extinction/Persistence data models reflects the rarity of extinction events within the data, rather than any issue with model fit."
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.text = element_text(face = "bold"),
+    axis.title.x = element_text(margin = margin(t = 15)),
+    axis.title.y = element_text(margin = margin(r = 15)),
+    plot.caption = element_text(hjust = 0, size = 10, margin = margin(t = 15))
+  ) 
+
+
+
+### --- OTHER SUPPLEMENTAL PLOTS --- ###
+
+# Species Richness #
+### Histogram of SR diff between RLL and NDR comp block sets
+# Data
+srdiff_rll <- covars_raw_rll %>% # RLL blocks
+  filter(atlas_block %in% blocks_rll) %>%
+  dplyr::select(sr_Diff) %>%
+  mutate(source = "rll")
+
+srdiff_dnr <- covars_raw_rll %>% # DNR blocks
+  filter(atlas_block %in% blocks_dnr) %>%
+  dplyr::select(sr_Diff) %>%
+  mutate(source = "dnr")
+
+srdiff_hist_data <- bind_rows(srdiff_rll, srdiff_dnr) # combine
+
+# Plot
+ggplot(srdiff_hist_data, aes(x = sr_Diff, fill = source)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  scale_fill_manual(
+    values = c("rll" = "orange", "dnr" = "steelblue"),
+    labels = c("DNR", "RLL")
+  ) +
+  theme_minimal(base_size = 13) +
+  labs(
+    x = "Species Richness Difference (Atlas 2 - Atlas 1)",
+    y = "Count",
+    fill = "Block Set",
+    caption = "Figure S1. Distribution of difference in species richness between Wisconsin Breeding Bird Atlas 1 (1995-2000) and 2 (2015-2019) between two
+    different survey block subsets (All Blocks, N = 7056; RLL, n = 2535; DNR, n = 858). Overall, blocks in the second Atlas were surveyed more comprehensively than 
+    in Atlas 1, resulting in higher-per-block species richness in Atlas 2 generally. The minimally filtered RLL block set retains a significant number of 
+    survey units with high species richness differences compared to the heavily filtered DNR block set, which largely controlled for these coverage discrepancies."
+  ) +
+  theme(
+    axis.title.x = element_text(margin = margin(t = 15)),
+    axis.title.y = element_text(margin = margin(r = 15)),
+    plot.caption = element_text(hjust = 0, size = 10, margin = margin(t = 15))
+  )
